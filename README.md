@@ -1,24 +1,16 @@
-# MCP Server with PGVector and LangChain Agent
+# MCP PGVector: AI Agent & API Server
 
-A powerful demonstration of the **Model Context Protocol (MCP)** integrated with **PostgreSQL (pgvector)** and **Hugging Face** for natural language vector search.
-
-This project consists of an MCP Server that provides vector search capabilities and a LangChain Agent that utilizes those tools to answer user questions.
+A high-performance implementation of the **Model Context Protocol (MCP)** integrated with **PostgreSQL (pgvector)** and **LangChain**. This project provides a semantic search engine capable of storing and retrieving high-dimensional vector data through both a REST API and an autonomous AI Agent.
 
 ---
 
-## 🚀 Overview
+## 🌟 Features
 
-- **MCP Server**: Built using the `@modelcontextprotocol/sdk`, it exposes a `search_items` tool. It generates embeddings on-the-fly using Hugging Face's `all-MiniLM-L6-v2` model and performs similarity searches against a PostgreSQL database.
-- **Agent**: A LangChain-powered agent using Groq's Llama-3 model. It connects to the MCP server via Standard I/O (Stdio), discovers available tools, and uses them to fulfill search requests.
-- **Database**: PostgreSQL with the `pgvector` extension for efficient nearest-neighbor searches.
-
-## 🛠️ Tech Stack
-
-- **Model Context Protocol (MCP)**: The interface between LLM and tools.
-- **Groq (Llama 3.1 8B)**: The "brain" that reasoning about tool usage.
-- **Hugging Face Inference**: Generates semantic embeddings (384-dimensional).
-- **LangChain**: Orchestrates the agent, tools, and prompts.
-- **PostgreSQL + pgvector**: Stores and queries high-dimensional vectors.
+- **Autonomous AI Agent**: powered by LangChain and Groq (Llama 3.1), capable of reasoning about tool usage.
+- **MCP Infrastructure**: Standardized tool discovery and execution using the Model Context Protocol.
+- **REST & Agent API**: Express server providing endpoints for bulk data ingestion and AI-powered natural language search.
+- **Seamless Embeddings**: Automatic vector generation using Hugging Face's `all-MiniLM-L6-v2` (384-dimensional).
+- **Vector DB**: Leverages PostgreSQL `pgvector` for advanced similarity searches (`<->` operator).
 
 ---
 
@@ -37,117 +29,105 @@ graph TD
     
     MCPServer -->|Results| Agent
     Agent -->|Final Answer| User
+
+    RestUser([API/Postman]) -->|POST /items| ApiServer[Express API Server]
+    ApiServer -->|Text| HF2[Hugging Face API]
+    HF2 -->|Vector| DB
 ```
 
 ---
 
-## 📖 Deep Dive: How it Works
-
-### 1. The Embedding Layer
-When you search for "machine learning", the query isn't matched against strings. Instead:
-1. The **MCP Server** sends your text to Hugging Face.
-2. The `all-MiniLM-L6-v2` model converts it into a **384-dimensional vector** (array of floats).
-3. This vector represents the *semantic meaning* of your query.
-
-### 2. The Vector Search
-The server uses the `pgvector` operator `<->` (L2 Distance) to find items in the database that are "closest" to your query vector.
-```sql
-SELECT id, name FROM items
-ORDER BY embedding <-> $1
-LIMIT 5;
-```
-
-### 3. The Agentic Reasoning
-The LangChain agent doesn't just run a script. It follows a **ReAct** (Reasoning + Acting) pattern:
-1. **Thought**: "The user wants to find items related to X. I should use the `search_items` tool."
-2. **Action**: Call `search_items(query="X")`.
-3. **Observation**: Receive JSON results from the database.
-4. **Thought**: "I have the results. Now I will summarize them for the user."
-5. **Final Answer**: A human-friendly response.
-
----
-
-## 🏗️ Setup Guide
+## 🚀 Getting Started
 
 ### 1. Prerequisites
-- [Node.js](https://nodejs.org/) (v18+)
-- [PostgreSQL](https://www.postgresql.org/) with [pgvector](https://github.com/pgvector/pgvector) installed.
+- **Node.js** (v18+)
+- **PostgreSQL** with the [pgvector](https://github.com/pgvector/pgvector) extension installed.
 
 ### 2. Database Setup
+Run the following SQL in your PostgreSQL instance:
 ```sql
--- Enable the extension
+-- Enable the vector extension
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- Create table with 384 dimensions (specific to all-MiniLM-L6-v2)
+-- Create the items table
 CREATE TABLE items (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     embedding vector(384)
 );
-
--- Example Insertion (Generating vectors externally)
-INSERT INTO items (name, embedding) VALUES ('Vector Database', '[0.12, -0.05, ...]');
 ```
 
-### 3. Installation
+### 3. Installation & Configuration
+Clone the repository and install dependencies:
 ```bash
 npm install
 ```
 
-### 4. Configuration
-Create a `.env` file:
+Create a `.env` file in the root directory:
 ```env
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=your_db
-DB_USER=your_user
+DB_NAME=postgres
+DB_USER=postgres
 DB_PASSWORD=your_password
 
-HF_API_KEY=your_huggingface_token
-GROQ_API_KEY=your_groq_api_key
+HF_API_KEY=hf_...
+GROQ_API_KEY=gsk_...
 ```
 
 ---
 
 ## 🏃 Running the Project
 
-Run the agent, which internally spawns the MCP server:
+### 🌐 Start the Full API Server
+This starts the Express server which hosts both the REST endpoints and the LangChain Agent.
 ```bash
-node ./agents/agent.js
+npm run api
 ```
 
-### Example Interaction
-**Input**: "Find me some AI tools"
-**Agent Activity**:
-1. Connects to `mcp-server/index.js` via stdio.
-2. Discovers `search_items`.
-3. Calls the tool with query "AI tools".
-4. Server generates embedding, queries DB, returns results.
-5. Agent presents the results.
+### 🤖 Run the CLI Agent
+Direct terminal access to the AI agent:
+```bash
+# Default query
+npm run agent
+
+# Custom query
+node agents/agent.js "Find tools for high-performance frontend"
+```
 
 ---
 
-## �️ Advanced: Adding Custom Tools
+## 📋 API Documentation
 
-You can extend the `mcp-server/index.js` to include more tools. Simply define them in the `tools` array and add a handler in `CallToolRequestSchema`:
+### **Agent Endpoints (AI-Powered)**
+| Endpoint | Method | Description | Payload |
+| :--- | :--- | :--- | :--- |
+| `/ask` | `POST` | Semantic search with AI summary | `{ "query": "..." }` |
+| `/chat` | `POST` | General commands (e.g., "Add X to database") | `{ "message": "..." }` |
 
-```javascript
-const tools = [
-  {
-    name: "add_item",
-    description: "Add a new item to the database with auto-embedding",
-    inputSchema: { ... }
-  }
-];
-```
+### **REST Endpoints (Data Management)**
+| Endpoint | Method | Description | Payload |
+| :--- | :--- | :--- | :--- |
+| `/items` | `POST` | Ingest single or array of items | `[{ "name": "React" }, { "name": "Vue" }]` |
+| `/items` | `GET` | List all records (paginated) | `?limit=50` |
+| `/search` | `GET` | Raw vector search (No AI summary) | `?query=database` |
+
+---
+
+## 🛠️ Project Structure
+
+- **`api/server.js`**: Express server & entry point for all endpoints.
+- **`mcp-server/index.js`**: The MCP Server implementation (logic for DB & Embeddings).
+- **`agents/agent_logic.js`**: Shared LangChain reasoning logic.
+- **`agents/agent.js`**: CLI wrapper for the agent.
 
 ---
 
 ## ⚠️ Troubleshooting
 
-- **Malformed Vector Literal**: Ensure your query embedding is formatted as `[1,2,3]` (with brackets) when sending to PostgreSQL.
-- **MCP Tool Error**: If you see `tool_use_failed`, check `console.error` logs in the server. Do not use `console.log` as it breaks the Stdio protocol.
-- **Hugging Face 410 Error**: Ensure you are using the latest `@huggingface/inference` package (>= 2.x) to use the new `router.huggingface.co` endpoints.
+- **404 /ask Error**: If you see this, ensure no old server processes are hogging the port. Restart the server with `npm run api`.
+- **Vector Mismatch**: Ensure your table uses `vector(384)` to match the Hugging Face `all-MiniLM-L6-v2` model.
+- **Logging**: MCP uses `stdout` for communication; use `console.error` for custom server logging to avoid breaking the protocol.
 
 ---
 
