@@ -1,9 +1,9 @@
 import dotenv from "dotenv";
-import { ChatOpenAI } from "@langchain/openai";
-import { createOpenAIFunctionsAgent } from "langchain/agents";
+import { ChatGroq } from "@langchain/groq";
+import { createToolCallingAgent, AgentExecutor } from "langchain/agents";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { StructuredTool } from "langchain/tools";
+import { DynamicStructuredTool } from "langchain/tools";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { z } from "zod";
 
@@ -66,7 +66,7 @@ async function main() {
             zodSchema = z.object({});
         }
 
-        return new StructuredTool({
+        return new DynamicStructuredTool({
             name: tool.name,
             description: tool.description ?? "",
             schema: zodSchema,
@@ -80,19 +80,16 @@ async function main() {
         });
     });
 
-    // 6️⃣ Setup LLM
-    const llm = new ChatOpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-        model: "gpt-4o-mini",
+    // 6️⃣ Setup LLM (Groq)
+    const llm = new ChatGroq({
+        apiKey: process.env.GROQ_API_KEY,
+        model: "llama-3.1-8b-instant",
         temperature: 0,
     });
 
     // 7️⃣ Create prompt template
     const prompt = PromptTemplate.fromTemplate(
         `You are a helpful assistant that can search for items using the available tools.
-        
-Current conversation history:
-{chat_history}
 
 Question: {input}
 
@@ -100,14 +97,22 @@ Question: {input}
     );
 
     // 8️⃣ Create agent
-    const agent = await createOpenAIFunctionsAgent({
+    const agent = await createToolCallingAgent({
         llm,
         tools,
         prompt,
     });
 
-    // 9️⃣ Run agent
-    const result = await agent.invoke({
+    // 9️⃣ Create executor
+    const agentExecutor = new AgentExecutor({
+        agent,
+        tools,
+        verbose: false,
+        maxIterations: 5,
+    });
+
+    // 🔟 Run agent
+    const result = await agentExecutor.invoke({
         input: "Find items related to machine learning",
     });
 
