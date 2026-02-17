@@ -67,7 +67,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name === "search_items") {
         try {
             const { query } = args;
-            console.log("🔎 Searching for:", query);
+            console.error("🔎 Searching for:", query);
 
             // Generate embedding internally
             const embeddingResponse = await hf.featureExtraction({
@@ -83,6 +83,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 throw new Error("Embedding generation failed");
             }
 
+            // Format as vector string for PostgreSQL: [1, 2, 3]
+            const vectorString = `[${queryEmbedding.join(",")}]`;
+
             // Vector similarity search
             const result = await pool.query(
                 `
@@ -91,7 +94,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 ORDER BY embedding <-> $1
                 LIMIT 5
                 `,
-                [queryEmbedding]
+                [vectorString]
             );
 
             return {
@@ -131,7 +134,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 try {
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    console.log("✅ MCP server running...");
+    console.error("✅ MCP server running...");
 } catch (err) {
     console.error("❌ Server failed to start:", err);
 }

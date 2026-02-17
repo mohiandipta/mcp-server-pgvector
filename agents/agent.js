@@ -4,7 +4,7 @@ import { createToolCallingAgent, AgentExecutor } from "langchain/agents";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { DynamicStructuredTool } from "langchain/tools";
-import { PromptTemplate } from "@langchain/core/prompts";
+import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
 import { z } from "zod";
 
 dotenv.config();
@@ -75,7 +75,17 @@ async function main() {
                     name: tool.name,
                     arguments: args,
                 });
-                return JSON.stringify(result.content);
+
+                const text = result.content
+                    .filter(c => c.type === 'text')
+                    .map(c => c.text)
+                    .join("\n");
+
+                if (result.isError) {
+                    throw new Error(text || "Unknown tool error");
+                }
+
+                return text;
             },
         });
     });
@@ -88,13 +98,11 @@ async function main() {
     });
 
     // 7️⃣ Create prompt template
-    const prompt = PromptTemplate.fromTemplate(
-        `You are a helpful assistant that can search for items using the available tools.
-
-Question: {input}
-
-{agent_scratchpad}`
-    );
+    const prompt = ChatPromptTemplate.fromMessages([
+        ["system", "You are a helpful assistant that can search for items using the available tools."],
+        ["human", "{input}"],
+        new MessagesPlaceholder("agent_scratchpad"),
+    ]);
 
     // 8️⃣ Create agent
     const agent = await createToolCallingAgent({
